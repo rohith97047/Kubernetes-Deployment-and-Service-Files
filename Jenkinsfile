@@ -6,6 +6,8 @@ pipeline {
         ECR_REPOSITORY = 'your-ecr-repository-url' // Replace 'your-ecr-repository-url'
         IMAGE_TAG = "${env.BUILD_ID}"
         IMAGE_NAME = "${ECR_REPOSITORY}:${IMAGE_TAG}"
+        AWS_REGION = "us-east-1" // replace with your AWS region.
+        CLUSTER_NAME = "simple-cluster" // replace with your cluster name.
     }
     stages {
         stage('Checkout') {
@@ -23,7 +25,8 @@ pipeline {
         stage('Push') {
             steps {
                 script {
-                    docker.withRegistry("${ECR_REPOSITORY}", AWS_ACCESS_KEY_ID) {
+                    withCredentials([string(credentialsId: 'your-aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'your-aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+                        sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPOSITORY.split('/')[0]}"
                         docker.push("${IMAGE_TAG}")
                     }
                 }
@@ -32,10 +35,12 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    withKubeConfig(credentialsId: 'your-kubeconfig-credentials') { // Replace 'your-kubeconfig-credentials'
+                    withCredentials([string(credentialsId: 'your-aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'your-aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+                        sh "aws eks --region ${AWS_REGION} update-kubeconfig --name ${CLUSTER_NAME}"
                         sh "kubectl apply -f kubernetes/deployment.yaml"
                         sh "kubectl apply -f kubernetes/service.yaml"
                     }
+
                 }
             }
         }
